@@ -58,6 +58,13 @@ exports.handler = async (event) => {
   // ✅ Preflight
   if (method === "OPTIONS") {
     // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
+     // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
+      // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
+       // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
+        // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
+         // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
+          // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
+          
     return {
       statusCode: 204,
       headers: buildHeaders(event),

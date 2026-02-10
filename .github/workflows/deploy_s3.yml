@@ -2,7 +2,7 @@ name: Deploy frontend to S3 (mirror)
 
 on:
   push:
-    branches: [ "main" ]   # 필요 시 변경
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
@@ -11,8 +11,8 @@ permissions:
 
 env:
   AWS_REGION: ap-northeast-2
-  S3_BUCKET: polly-bucket-edumgt   # ← 버킷명
-  BUILD_DIR: frontend                  # ← 빌드 결과 폴더 (Vite면 dist)
+  S3_BUCKET: polly-bucket-edumgt
+  BUILD_DIR: frontend
 
 jobs:
   deploy:
@@ -22,23 +22,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # OIDC로 AWS 임시 자격증명 발급
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::086015456585:role/github-actions-ai-aws-polly-deploy-role
           aws-region: ${{ env.AWS_REGION }}
 
-      # (선택) SPA 라우팅이면 index.html 캐시 짧게, 정적자원은 길게 같은 전략을 보통 씁니다.
+      # ✅ 백엔드 Lambda 배포 스크립트 실행 (추가)
+      - name: Deploy backend Lambda (aws-cli script)
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x infra/aws-cli-deploy-lambda.sh
+          AWS_REGION="${{ env.AWS_REGION }}" \
+          S3_BUCKET="${{ env.S3_BUCKET }}" \
+          ./infra/aws-cli-deploy-lambda.sh
+
       - name: Sync assets to S3 (mirror)
         run: |
           aws s3 sync "${{ env.BUILD_DIR }}/" "s3://${{ env.S3_BUCKET }}/frontend/" \
             --delete \
             --only-show-errors
-
-      # (선택) CloudFront 무효화가 필요하면 아래를 켜세요
-      # - name: Invalidate CloudFront
-      #   run: |
-      #     aws cloudfront create-invalidation \
-      #       --distribution-id YOUR_DISTRIBUTION_ID \
-      #       --paths "/*"
