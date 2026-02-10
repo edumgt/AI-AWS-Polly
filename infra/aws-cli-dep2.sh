@@ -34,8 +34,8 @@ trap cleanup EXIT
 log() { echo "[$(date +'%H:%M:%S')] $*"; }
 
 # ------------------------------------------------------------
-# Lambda update 충돌 방지 유틸
-# ------------------------------------------------------------
+# Lambda update 충돌 방지 유틸 ##
+# ------------------------------------ ------------------------
 wait_lambda_updated() {
   local fn="$1"
   aws lambda wait function-updated --function-name "$fn" --region "$AWS_REGION" >/dev/null 2>&1 || true
