@@ -75,14 +75,15 @@ aws iam put-user-policy \
 
 
 ```bash
-
 export AWS_REGION=ap-northeast-2
 export LAMBDA_NAME=polly-tts-lambda
 export ROLE_NAME=polly-tts-lambda-role
 export POLLY_S3_BUCKET=polly-bucket-edumgt
 export CORS_ALLOW_ORIGIN='*'
+```
+---
+```
 sudo ./infra/aws-cli-deploy-lambda.sh
-
 ```
 #### POLLY_S3_BUCKET 의 버킷명은 전세계 고유할 것으로 예상하는 이름으로 줄것
 

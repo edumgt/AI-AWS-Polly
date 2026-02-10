@@ -11,23 +11,18 @@ const ALLOWED_ORIGIN =
   "http://polly-bucket-edumgt.s3-website.ap-northeast-2.amazonaws.com";
 
 function normalizeOrigin(o = "") {
-  // 혹시 모를 trailing slash 제거
   return String(o).replace(/\/$/, "");
 }
 
 function getCorsOrigin(event) {
-  const reqOrigin =
-    event?.headers?.origin ||
-    event?.headers?.Origin ||
-    "";
-
+  const reqOrigin = event?.headers?.origin || event?.headers?.Origin || "";
   if (normalizeOrigin(reqOrigin) === normalizeOrigin(ALLOWED_ORIGIN)) {
-    return normalizeOrigin(ALLOWED_ORIGIN); // 반드시 정확히 origin 형태로
+    return normalizeOrigin(reqOrigin); // 요청 Origin 그대로(정확히 매칭된 값)
   }
-  return ""; // 불일치면 CORS 헤더 미부여
+  return "";
 }
 
-function response(event, statusCode, payload, extraHeaders = {}) {
+function buildHeaders(event, extraHeaders = {}) {
   const corsOrigin = getCorsOrigin(event);
 
   const headers = {
@@ -35,45 +30,39 @@ function response(event, statusCode, payload, extraHeaders = {}) {
     "Access-Control-Allow-Methods": "POST,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "600",
-    ...extraHeaders
+    ...extraHeaders,
   };
 
-  // 허용된 Origin일 때만 CORS 헤더 내려줌
   if (corsOrigin) {
     headers["Access-Control-Allow-Origin"] = corsOrigin;
-    headers["Vary"] = "Origin"; // 캐시/프록시 안전
+    headers["Vary"] = "Origin";
   }
 
+  return headers;
+}
+
+function response(event, statusCode, payload, extraHeaders = {}) {
   return {
     statusCode,
-    headers,
-    body: JSON.stringify(payload)
+    headers: buildHeaders(event, extraHeaders),
+    body: payload === "" ? "" : JSON.stringify(payload),
   };
 }
 
 const polly = new PollyClient({ region });
 const s3 = new S3Client({ region });
 
-
 exports.handler = async (event) => {
   const method = event?.requestContext?.http?.method || event?.httpMethod;
 
-  // ✅ preflight 처리
+  // ✅ Preflight
   if (method === "OPTIONS") {
+    // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
     return {
       statusCode: 204,
-      headers: {
-        "Access-Control-Allow-Origin": allowOrigin,
-        "Access-Control-Allow-Methods": "POST,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Max-Age": "600"
-      },
-      body: ""
+      headers: buildHeaders(event),
+      body: "",
     };
-  }
-
-  if (!region || !bucket) {
-    return response(500, { error: "AWS_REGION 및 POLLY_S3_BUCKET 환경변수가 필요합니다." });
   }
 
   try {
@@ -83,20 +72,22 @@ exports.handler = async (event) => {
       textType = "text",
       voiceId = "Seoyeon",
       engine = "standard",
-      format = "mp3"
+      format = "mp3",
     } = body;
 
     if (!text || !String(text).trim()) {
-      return response(400, { error: "text가 필요합니다." });
+      return response(event, 400, { error: "text가 필요합니다." });
     }
 
-    const pollyRes = await polly.send(new SynthesizeSpeechCommand({
-      Text: text,
-      TextType: textType,
-      VoiceId: voiceId,
-      OutputFormat: format,
-      Engine: engine
-    }));
+    const pollyRes = await polly.send(
+      new SynthesizeSpeechCommand({
+        Text: text,
+        TextType: textType,
+        VoiceId: voiceId,
+        OutputFormat: format,
+        Engine: engine,
+      })
+    );
 
     const chunks = [];
     for await (const chunk of pollyRes.AudioStream) chunks.push(chunk);
@@ -111,12 +102,14 @@ exports.handler = async (event) => {
       format === "ogg_vorbis" ? "audio/ogg" :
       "application/octet-stream";
 
-    await s3.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType
-    }));
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      })
+    );
 
     const audioUrl = await getSignedUrl(
       s3,
@@ -124,16 +117,16 @@ exports.handler = async (event) => {
       { expiresIn: 3600 }
     );
 
-    return response(200, {
+    return response(event, 200, {
       savedToS3: true,
       s3Bucket: bucket,
       s3Key: key,
       contentType,
       audioUrl,
-      expiresIn: 3600
+      expiresIn: 3600,
     });
   } catch (error) {
     console.error(error);
-    return response(500, { error: error.message || "unknown error" });
+    return response(event, 500, { error: error.message || "unknown error" });
   }
 };
