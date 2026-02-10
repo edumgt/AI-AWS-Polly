@@ -2,30 +2,58 @@ const { PollyClient, SynthesizeSpeechCommand } = require("@aws-sdk/client-polly"
 const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
-const region = process.env.AWS_REGION;
-const bucket = process.env.POLLY_S3_BUCKET;
-const prefix = process.env.POLLY_S3_PREFIX || "polly-lab/";
+const region = "ap-northeast-2";
+const bucket = "polly-bucket-edumgt";
+const prefix = "polly-lab/";
 
-// ✅ 로컬 FE 오리진(필요시 추가)
-const allowOrigin = process.env.CORS_ALLOW_ORIGIN || "http://localhost:8080";
+const ALLOWED_ORIGIN =
+  process.env.CORS_ALLOW_ORIGIN ||
+  "http://polly-bucket-edumgt.s3-website.ap-northeast-2.amazonaws.com";
+
+function normalizeOrigin(o = "") {
+  // 혹시 모를 trailing slash 제거
+  return String(o).replace(/\/$/, "");
+}
+
+function getCorsOrigin(event) {
+  const reqOrigin =
+    event?.headers?.origin ||
+    event?.headers?.Origin ||
+    "";
+
+  if (normalizeOrigin(reqOrigin) === normalizeOrigin(ALLOWED_ORIGIN)) {
+    return normalizeOrigin(ALLOWED_ORIGIN); // 반드시 정확히 origin 형태로
+  }
+  return ""; // 불일치면 CORS 헤더 미부여
+}
+
+function response(event, statusCode, payload, extraHeaders = {}) {
+  const corsOrigin = getCorsOrigin(event);
+
+  const headers = {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Methods": "POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "600",
+    ...extraHeaders
+  };
+
+  // 허용된 Origin일 때만 CORS 헤더 내려줌
+  if (corsOrigin) {
+    headers["Access-Control-Allow-Origin"] = corsOrigin;
+    headers["Vary"] = "Origin"; // 캐시/프록시 안전
+  }
+
+  return {
+    statusCode,
+    headers,
+    body: JSON.stringify(payload)
+  };
+}
 
 const polly = new PollyClient({ region });
 const s3 = new S3Client({ region });
 
-function response(statusCode, payload, extraHeaders = {}) {
-  return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": allowOrigin,
-      "Access-Control-Allow-Methods": "POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Max-Age": "600",
-      ...extraHeaders
-    },
-    body: JSON.stringify(payload)
-  };
-}
 
 exports.handler = async (event) => {
   const method = event?.requestContext?.http?.method || event?.httpMethod;

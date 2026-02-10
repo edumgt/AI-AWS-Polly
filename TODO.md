@@ -19,6 +19,8 @@ sudo apt install -y groff-base
 
 - [ ] S3 오디오 객체 자동 정리 설계
   - [ ] 옵션 A: Lifecycle Rule(일 단위)
+  - [ ] 옵션 B: EventBridge + Lambda(정확히 1시간 후 삭제)
+  - [ ] 객체 태그(`ttl=1h`) 기반 삭제 정책 검토
 ---
 
 ![alt text](image-7.png)
@@ -44,8 +46,7 @@ aws lambda add-permission \
   --source-arn "arn:aws:events:ap-northeast-2:086015456585:rule/polly-lab-objectcreated"
 ```
 
-  - [ ] 옵션 B: EventBridge + Lambda(정확히 1시간 후 삭제)
-  - [ ] 객체 태그(`ttl=1h`) 기반 삭제 정책 검토
+
 - [ ] Presigned URL 만료 정책 표준화(예: 5~15분)
 - [ ] S3 버전닝/삭제마커가 비용에 미치는 영향 검증
 
