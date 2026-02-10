@@ -33,14 +33,6 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Debug - list lambdas
-        run: |
-          aws lambda list-functions \
-            --region "${{ env.AWS_REGION }}" \
-            --query "Functions[?contains(FunctionName, 'polly')].FunctionName" \
-            --output table
-
-
       - name: Deploy backend Lambda (zip upload only)
         shell: bash
         run: |
