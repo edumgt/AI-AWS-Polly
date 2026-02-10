@@ -32,7 +32,7 @@ jobs:
       # (선택) SPA 라우팅이면 index.html 캐시 짧게, 정적자원은 길게 같은 전략을 보통 씁니다.
       - name: Sync assets to S3 (mirror)
         run: |
-          aws s3 sync "${{ env.BUILD_DIR }}/" "s3://${{ env.S3_BUCKET }}/" \
+          aws s3 sync "${{ env.BUILD_DIR }}/" "s3://${{ env.S3_BUCKET }}/frontend/" \
             --delete \
             --only-show-errors
 
