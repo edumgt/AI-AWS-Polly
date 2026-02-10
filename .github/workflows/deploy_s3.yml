@@ -28,15 +28,23 @@ jobs:
           role-to-assume: arn:aws:iam::086015456585:role/github-actions-ai-aws-polly-deploy-role
           aws-region: ${{ env.AWS_REGION }}
 
-      # ✅ 백엔드 Lambda 배포 스크립트 실행 (추가)
-      - name: Deploy backend Lambda (aws-cli script)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Deploy backend Lambda (zip upload only)
         shell: bash
         run: |
-          set -euo pipefail
-          chmod +x infra/aws-cli-deploy-lambda.sh
+          chmod +x infra/aws-cli-dep2.sh
           AWS_REGION="${{ env.AWS_REGION }}" \
-          S3_BUCKET="${{ env.S3_BUCKET }}" \
-          ./infra/aws-cli-deploy-lambda.sh
+          LAMBDA_NAME="polly-tts-lambda" \
+          LAMBDA_DIR="lambda" \
+          ZIP_FILE="lambda.zip" \
+          FAIL_IF_MISSING="1" \
+          UPDATE_CONFIG="0" \
+          ./infra/aws-cli-dep2.sh
+
 
       - name: Sync assets to S3 (mirror)
         run: |
