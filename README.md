@@ -53,6 +53,18 @@ AI-AWS-Polly/
 사전 요구사항
 - AWS CLI 로그인 완료
 - Node.js 18+
+
+---
+```
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates
+
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+---
+
+
 - S3 버킷 1개
 
 ```
