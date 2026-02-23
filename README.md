@@ -288,6 +288,10 @@ root@DESKTOP-D6A344Q:/home/AI-AWS-Polly# aws lambda add-permission \
     "Statement": "{\"Sid\":\"UrlPolicyInvokeFunctionPublic\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"lambda:InvokeFunction\",\"Resource\":\"arn:aws:lambda:ap-northeast-2:086015456585:function:polly-tts-lambda\",\"Condition\":{\"Bool\":{\"lambda:InvokedViaFunctionUrl\":\"true\"}}}"
 }
 ```
+---
+
+![alt text](image-8.png)
+
 
 ---
 ### 람다 다시 반영할때도
