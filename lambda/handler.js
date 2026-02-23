@@ -2,52 +2,11 @@ const { PollyClient, SynthesizeSpeechCommand } = require("@aws-sdk/client-polly"
 const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
+const { corsResponse, handlePreflight } = require("./cors");
+
 const region = "ap-northeast-2";
 const bucket = "polly-bucket-edumgt";
 const prefix = "polly-lab/";
-
-const ALLOWED_ORIGIN =
-  process.env.CORS_ALLOW_ORIGIN ||
-  "http://polly-bucket-edumgt.s3-website.ap-northeast-2.amazonaws.com";
-
-function normalizeOrigin(o = "") {
-  return String(o).replace(/\/$/, "");
-}
-
-function getCorsOrigin(event) {
-  const reqOrigin = event?.headers?.origin || event?.headers?.Origin || "";
-  if (normalizeOrigin(reqOrigin) === normalizeOrigin(ALLOWED_ORIGIN)) {
-    return normalizeOrigin(reqOrigin); // 요청 Origin 그대로(정확히 매칭된 값)
-  }
-  return "";
-}
-
-function buildHeaders(event, extraHeaders = {}) {
-  const corsOrigin = getCorsOrigin(event);
-
-  const headers = {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Methods": "POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Max-Age": "600",
-    ...extraHeaders,
-  };
-
-  if (corsOrigin) {
-    headers["Access-Control-Allow-Origin"] = corsOrigin;
-    headers["Vary"] = "Origin";
-  }
-
-  return headers;
-}
-
-function response(event, statusCode, payload, extraHeaders = {}) {
-  return {
-    statusCode,
-    headers: buildHeaders(event, extraHeaders),
-    body: payload === "" ? "" : JSON.stringify(payload),
-  };
-}
 
 const polly = new PollyClient({ region });
 const s3 = new S3Client({ region });
@@ -57,19 +16,7 @@ exports.handler = async (event) => {
 
   // ✅ Preflight
   if (method === "OPTIONS") {
-    // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
-     // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
-      // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
-       // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
-        // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
-         // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
-          // body는 비워도 되고, JSON으로 줘도 되지만 보통 204 + empty body
-          
-    return {
-      statusCode: 204,
-      headers: buildHeaders(event),
-      body: "",
-    };
+    return handlePreflight(event);
   }
 
   try {
@@ -83,7 +30,7 @@ exports.handler = async (event) => {
     } = body;
 
     if (!text || !String(text).trim()) {
-      return response(event, 400, { error: "text가 필요합니다." });
+      return corsResponse(event, 400, { error: "text가 필요합니다." });
     }
 
     const pollyRes = await polly.send(
@@ -124,7 +71,7 @@ exports.handler = async (event) => {
       { expiresIn: 3600 }
     );
 
-    return response(event, 200, {
+    return corsResponse(event, 200, {
       savedToS3: true,
       s3Bucket: bucket,
       s3Key: key,
@@ -134,6 +81,6 @@ exports.handler = async (event) => {
     });
   } catch (error) {
     console.error(error);
-    return response(event, 500, { error: error.message || "unknown error" });
+    return corsResponse(event, 500, { error: error.message || "unknown error" });
   }
 };
