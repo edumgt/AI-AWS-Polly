@@ -292,6 +292,7 @@ root@DESKTOP-D6A344Q:/home/AI-AWS-Polly# aws lambda add-permission \
 
 ![alt text](image-8.png)
 
+![alt text](image-9.png)
 
 ---
 ### 람다 다시 반영할때도
