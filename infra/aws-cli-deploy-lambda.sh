@@ -114,11 +114,9 @@ ensure_bucket_exists_or_create() {
 
   local create_out rc
   set +e
-  if [[ "$AWS_REGION" == "us-east-1" ]]; then
-    create_out="$(aws s3api create-bucket --bucket "$b" 2>&1)"
-  else
-    create_out="$(aws s3api create-bucket --bucket "$b" --create-bucket-configuration "LocationConstraint=$AWS_REGION" 2>&1)"
-  fi
+ 
+  create_out="$(aws s3api create-bucket --bucket "$b" --create-bucket-configuration "LocationConstraint=$AWS_REGION" 2>&1)"
+  
   rc=$?
   set -e
 
@@ -145,11 +143,9 @@ ensure_bucket_exists_or_create() {
     POLLY_S3_BUCKET="$alt"
 
     # 실제 생성
-    if [[ "$AWS_REGION" == "us-east-1" ]]; then
-      aws s3api create-bucket --bucket "$POLLY_S3_BUCKET" >/dev/null
-    else
-      aws s3api create-bucket --bucket "$POLLY_S3_BUCKET" --create-bucket-configuration "LocationConstraint=$AWS_REGION" >/dev/null
-    fi
+   
+    aws s3api create-bucket --bucket "$POLLY_S3_BUCKET" --create-bucket-configuration "LocationConstraint=$AWS_REGION" >/dev/null
+
     log "  - bucket created: $POLLY_S3_BUCKET"
     return 0
   fi

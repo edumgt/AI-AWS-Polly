@@ -171,6 +171,14 @@ http-server frontend -p 8080
 ---
 ### CORS 오류 발생 시
 
+---
+```
+curl -i -X OPTIONS "https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/" \
+  -H "Origin: http://localhost:8080" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type,authorization"
+```
+
 ```
 debian@DESKTOP-OJOTK17:~/project/AI-AWS-Polly$ URL="https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/" 
 
@@ -188,6 +196,39 @@ x-amzn-RequestId: 6c2ba115-254e-4145-a115-a8c8da97230c
 x-amzn-ErrorType: AccessDeniedException
 
 {"Message":"Forbidden. For troubleshooting Function URL authorization issues, see: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html"}debian@DESKTOP-OJOTK17:~/project/AI-AWS-Polly$ 
+```
+
+---
+```
+root@DESKTOP-OJOTK17:/home/AI-AWS-Polly# aws lambda get-function-url-config --function-name polly-tts-lambda
+{
+    "FunctionUrl": "https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/",
+    "FunctionArn": "arn:aws:lambda:ap-northeast-2:086015456585:function:polly-tts-lambda",
+    "AuthType": "NONE",
+    "CreationTime": "2026-02-09T07:22:19.958646680Z",
+    "LastModifiedTime": "2026-02-09T07:47:55.217403711Z",
+    "InvokeMode": "BUFFERED"
+}
+```
+---
+```
+aws lambda update-function-url-config \
+  --function-name polly-tts-lambda \
+  --cors 'AllowOrigins=["http://localhost:8080"],AllowMethods=["POST","OPTIONS"],AllowHeaders=["Content-Type","Authorization"],MaxAge=600'
+```
+---
+```
+aws lambda update-function-url-config \
+  --function-name polly-tts-lambda \
+  --cors '{"AllowOrigins":["http://localhost:8080"],"AllowMethods":["POST"],"AllowHeaders":["Content-Type","Authorization"],"MaxAge":600}'
+```
+
+---
+```
+curl -i -X OPTIONS "https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/" \
+  -H "Origin: http://localhost:8080" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type,authorization"
 ```
 
 ![alt text](image-3.png)
