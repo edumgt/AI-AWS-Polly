@@ -42,6 +42,8 @@ AI-AWS-Polly/
   lambda/                     # AWS Lambda 핸들러(Node.js)
   frontend/                   # 브라우저 입력/재생 UI
   infra/aws-cli-deploy-lambda.sh
+  docker-compose.yml          # Docker Compose 실행 파일
+  .env.example                # 환경변수 예시 (복사 후 .env로 사용)
   docs/
     chapters/Chapter01~10.md  # 커리큘럼형 학습 문서
 ```
@@ -49,7 +51,47 @@ AI-AWS-Polly/
 ## 1) 커리큘럼 학습
 - `docs/chapters/README.md`에서 Chapter01~10 순서로 학습하세요.
 
-## 2) Lambda 배포 (AWS CLI)
+## 2) Docker 기반 실행 (권장)
+
+Node.js 설치 없이 Docker만으로 서버와 프론트엔드를 실행할 수 있습니다.
+
+### 사전 요구사항
+- Docker 및 Docker Compose 설치
+- AWS 자격증명 (Access Key / Secret Key)
+
+### 실행 방법
+
+1. `.env.example`을 복사해 `.env` 파일을 생성한 후 AWS 정보를 입력합니다.
+   ```bash
+   cp .env.example .env
+   ```
+   `.env` 파일 내용 예시:
+   ```
+   AWS_REGION=ap-northeast-2
+   AWS_ACCESS_KEY_ID=xxxx
+   AWS_SECRET_ACCESS_KEY=xxxx
+   POLLY_S3_BUCKET=your-unique-bucket-name
+   POLLY_S3_PREFIX=polly-lab/
+   CORS_ALLOW_ORIGIN=http://localhost:8080
+   ```
+
+2. Docker Compose로 빌드 및 실행합니다.
+   ```bash
+   docker compose up --build
+   ```
+   - Express 서버: http://localhost:3001
+   - Frontend: http://localhost:8080
+
+3. 브라우저에서 http://localhost:8080 접속 후 Lambda Function URL 입력란에 `http://localhost:3001` 을 입력하면 로컬 서버를 통해 TTS를 사용할 수 있습니다.
+
+### 종료
+```bash
+docker compose down
+```
+
+---
+
+## 3) Lambda 배포 (AWS CLI)
 사전 요구사항
 - AWS CLI 로그인 완료
 - Node.js 18+
@@ -101,7 +143,7 @@ sudo ./infra/aws-cli-deploy-lambda.sh
 
 #### 다음의 에러가 보일 경우 update 대기필요
 ```
-An error occurred (ResourceConflictException) when calling the UpdateFunctionConfiguration operation: The operation cannot be performed at this time. An update is in progress for resource: arn:aws:lambda:ap-northeast-2:086015456585:function:polly-tts-lambda
+An error occurred (ResourceConflictException) when calling the UpdateFunctionConfiguration operation: The operation cannot be performed at this time. An update is in progress for resource: arn:aws:lambda:ap-northeast-2:xxxxxxxxxxxx:function:polly-tts-lambda
 ```
 ---
 ```
@@ -141,7 +183,7 @@ root@DESKTOP-D6A344Q:/home/AI-AWS-Polly# aws lambda get-function-configuration \
 [19:25:20] [8/8] Done
 
 완료:
- - Function URL: https://urcofhfr7rkzdnpvokasrpv7ae0dovrx.lambda-url.ap-northeast-2.on.aws/
+ - Function URL: https://xxxx.lambda-url.ap-northeast-2.on.aws/
  - S3 Bucket   : polly-bucket-edumgt
  - S3 Prefix   : polly-lab/
  ```
@@ -151,7 +193,7 @@ root@DESKTOP-D6A344Q:/home/AI-AWS-Polly# aws lambda get-function-configuration \
 ![alt text](image-1.png)
 
 
-## 3) Frontend 실행
+## 4) Frontend 실행
 정적 파일 서버로 `frontend/`를 사용합니다. Repo 상위 폴더에서 http-server frontend -p 8080 실행
 
 ```bash
@@ -173,14 +215,14 @@ http-server frontend -p 8080
 
 ---
 ```
-curl -i -X OPTIONS "https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/" \
+curl -i -X OPTIONS "https://xxxx.lambda-url.ap-northeast-2.on.aws/" \
   -H "Origin: http://localhost:8080" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: content-type,authorization"
 ```
 
 ```
-debian@DESKTOP-OJOTK17:~/project/AI-AWS-Polly$ URL="https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/" 
+debian@DESKTOP-OJOTK17:~/project/AI-AWS-Polly$ URL="https://xxxx.lambda-url.ap-northeast-2.on.aws/" 
 
 # preflight 재현
 curl -i -X OPTIONS "$URL" \
@@ -192,7 +234,7 @@ Date: Mon, 09 Feb 2026 07:38:07 GMT
 Content-Type: application/json
 Content-Length: 144
 Connection: keep-alive
-x-amzn-RequestId: 6c2ba115-254e-4145-a115-a8c8da97230c
+x-amzn-RequestId: xxxx
 x-amzn-ErrorType: AccessDeniedException
 
 {"Message":"Forbidden. For troubleshooting Function URL authorization issues, see: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html"}debian@DESKTOP-OJOTK17:~/project/AI-AWS-Polly$ 
@@ -202,8 +244,8 @@ x-amzn-ErrorType: AccessDeniedException
 ```
 root@DESKTOP-OJOTK17:/home/AI-AWS-Polly# aws lambda get-function-url-config --function-name polly-tts-lambda
 {
-    "FunctionUrl": "https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/",
-    "FunctionArn": "arn:aws:lambda:ap-northeast-2:086015456585:function:polly-tts-lambda",
+    "FunctionUrl": "https://xxxx.lambda-url.ap-northeast-2.on.aws/",
+    "FunctionArn": "arn:aws:lambda:ap-northeast-2:xxxxxxxxxxxx:function:polly-tts-lambda",
     "AuthType": "NONE",
     "CreationTime": "2026-02-09T07:22:19.958646680Z",
     "LastModifiedTime": "2026-02-09T07:47:55.217403711Z",
@@ -225,7 +267,7 @@ aws lambda update-function-url-config \
 
 ---
 ```
-curl -i -X OPTIONS "https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/" \
+curl -i -X OPTIONS "https://xxxx.lambda-url.ap-northeast-2.on.aws/" \
   -H "Origin: http://localhost:8080" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: content-type,authorization"
@@ -245,8 +287,8 @@ root@DESKTOP-D6A344Q:/home/AI-AWS-Polly/server# aws lambda update-function-url-c
     "MaxAge":86400
   }'
 {
-    "FunctionUrl": "https://urcofhfr7rkzdnpvokasrpv7ae0dovrx.lambda-url.ap-northeast-2.on.aws/",
-    "FunctionArn": "arn:aws:lambda:ap-northeast-2:086015456585:function:polly-tts-lambda",
+    "FunctionUrl": "https://xxxx.lambda-url.ap-northeast-2.on.aws/",
+    "FunctionArn": "arn:aws:lambda:ap-northeast-2:xxxxxxxxxxxx:function:polly-tts-lambda",
     "AuthType": "NONE",
     "Cors": {
         "AllowHeaders": [
@@ -285,7 +327,7 @@ root@DESKTOP-D6A344Q:/home/AI-AWS-Polly# aws lambda add-permission \
   --principal "*" \
   --invoked-via-function-url
 {
-    "Statement": "{\"Sid\":\"UrlPolicyInvokeFunctionPublic\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"lambda:InvokeFunction\",\"Resource\":\"arn:aws:lambda:ap-northeast-2:086015456585:function:polly-tts-lambda\",\"Condition\":{\"Bool\":{\"lambda:InvokedViaFunctionUrl\":\"true\"}}}"
+    "Statement": "{\"Sid\":\"UrlPolicyInvokeFunctionPublic\",\"Effect\":\"Allow\",\"Principal\":\"*\",\"Action\":\"lambda:InvokeFunction\",\"Resource\":\"arn:aws:lambda:ap-northeast-2:xxxxxxxxxxxx:function:polly-tts-lambda\",\"Condition\":{\"Bool\":{\"lambda:InvokedViaFunctionUrl\":\"true\"}}}"
 }
 ```
 ---
@@ -313,7 +355,7 @@ aws polly describe-voices \
   --output text
 ```
 
-## 4) 기존 Express 서버 사용(옵션)
+## 5) 기존 Express 서버 사용(옵션)
 ```bash
 cd server
 npm i
@@ -335,7 +377,7 @@ node index.js
 - IAM: `docs/iam-policy.md`
 - TODO(고도화 백로그): `TODO.md`
 
-## 5) 운영 관점 기술 상세 (실무 체크포인트)
+## 6) 운영 관점 기술 상세 (실무 체크포인트)
 
 ### 5-1. 오디오 파일 수명주기(S3 Lifecycle)
 - TTS 결과물을 임시 파일로 다루는 경우, 비용/보안/개인정보 관점에서 **자동 만료 정책**이 중요합니다.
