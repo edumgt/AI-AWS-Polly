@@ -5,11 +5,18 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { corsResponse, handlePreflight } = require("./cors");
 
 const region = "ap-northeast-2";
-const bucket = "polly-bucket-edumgt";
+const bucket = "edumgt-20260402-14-test";
 const prefix = "polly-lab/";
 
 const polly = new PollyClient({ region });
 const s3 = new S3Client({ region });
+
+function isUnsupportedEngineError(error) {
+  return (
+    error?.name === "ValidationException" &&
+    String(error?.message || "").includes("does not support the selected engine")
+  );
+}
 
 exports.handler = async (event) => {
   const method = event?.requestContext?.http?.method || event?.httpMethod;
@@ -25,7 +32,7 @@ exports.handler = async (event) => {
       text,
       textType = "text",
       voiceId = "Seoyeon",
-      engine = "standard",
+      engine = "neural",
       format = "mp3",
     } = body;
 
@@ -33,15 +40,35 @@ exports.handler = async (event) => {
       return corsResponse(event, 400, { error: "text가 필요합니다." });
     }
 
-    const pollyRes = await polly.send(
-      new SynthesizeSpeechCommand({
-        Text: text,
-        TextType: textType,
-        VoiceId: voiceId,
-        OutputFormat: format,
-        Engine: engine,
-      })
-    );
+    let pollyRes;
+    let resolvedEngine = engine;
+
+    try {
+      pollyRes = await polly.send(
+        new SynthesizeSpeechCommand({
+          Text: text,
+          TextType: textType,
+          VoiceId: voiceId,
+          OutputFormat: format,
+          Engine: resolvedEngine,
+        })
+      );
+    } catch (error) {
+      if (!isUnsupportedEngineError(error) || resolvedEngine !== "standard") {
+        throw error;
+      }
+
+      resolvedEngine = "neural";
+      pollyRes = await polly.send(
+        new SynthesizeSpeechCommand({
+          Text: text,
+          TextType: textType,
+          VoiceId: voiceId,
+          OutputFormat: format,
+          Engine: resolvedEngine,
+        })
+      );
+    }
 
     const chunks = [];
     for await (const chunk of pollyRes.AudioStream) chunks.push(chunk);
@@ -76,11 +103,13 @@ exports.handler = async (event) => {
       s3Bucket: bucket,
       s3Key: key,
       contentType,
+      engine: resolvedEngine,
       audioUrl,
       expiresIn: 3600,
     });
   } catch (error) {
     console.error(error);
-    return corsResponse(event, 500, { error: error.message || "unknown error" });
+    const statusCode = error?.name === "ValidationException" ? 400 : 500;
+    return corsResponse(event, statusCode, { error: error.message || "unknown error" });
   }
 };

@@ -12,6 +12,8 @@
 - **Amazon S3**: 생성된 음성 파일 저장 및 정적 접근
 - **AWS IAM**: Lambda 실행 역할/권한 및 배포 권한 관리
 
+![alt text](image-10.png)
+
 ### SDK / API / 배포 도구
 - **AWS SDK for JavaScript v3**: Polly/S3 등 AWS API 호출
 - **AWS CLI**: IAM 정책 적용, Lambda 배포/업데이트, S3 CORS 설정
@@ -117,9 +119,9 @@ sudo apt-get install -y zip unzip
 
 ```
 aws iam put-user-policy \
-  --user-name bedrock \
+  --user-name devtest2 \
   --policy-name polly-tts-lambda-deploy \
-  --policy-document file://polly-lambda-deploy.json
+  --policy-document file://JSON/polly-lambda-deploy.json
 ```
 ![alt text](image-5.png)
 
@@ -132,7 +134,7 @@ aws iam put-user-policy \
 export AWS_REGION=ap-northeast-2
 export LAMBDA_NAME=polly-tts-lambda
 export ROLE_NAME=polly-tts-lambda-role
-export POLLY_S3_BUCKET=polly-bucket-edumgt
+export POLLY_S3_BUCKET=edumgt-20260402-14-test
 export CORS_ALLOW_ORIGIN='*'
 ```
 ---
@@ -173,18 +175,18 @@ root@DESKTOP-D6A344Q:/home/AI-AWS-Polly# aws lambda get-function-configuration \
 [19:24:45] [2/8] IAM role create (if not exists)
 [19:24:46] [3/8] Attach policies
 [19:24:49] [4/8] Ensure S3 bucket exists (create if missing)
-[19:24:50]   - bucket not accessible or not exists: polly-bucket-edumgt (head-bucket rc=254)
+[19:24:50]   - bucket not accessible or not exists: edumgt-20260402-14-test (head-bucket rc=254)
 [19:24:50]   - trying to create bucket in region: ap-northeast-2
-[19:24:51]   - bucket created: polly-bucket-edumgt
+[19:24:51]   - bucket created: edumgt-20260402-14-test
 [19:24:51] [5/8] Lambda create/update (conflict-safe)
 [19:25:15] [6/8] Function URL create/get
 [19:25:18] [7/8] S3 bucket CORS apply
-[19:25:20]   - bucket CORS applied: polly-bucket-edumgt
+[19:25:20]   - bucket CORS applied: edumgt-20260402-14-test
 [19:25:20] [8/8] Done
 
 완료:
  - Function URL: https://xxxx.lambda-url.ap-northeast-2.on.aws/
- - S3 Bucket   : polly-bucket-edumgt
+ - S3 Bucket   : edumgt-20260402-14-test
  - S3 Prefix   : polly-lab/
  ```
 
@@ -256,7 +258,7 @@ root@DESKTOP-OJOTK17:/home/AI-AWS-Polly# aws lambda get-function-url-config --fu
 ```
 aws lambda update-function-url-config \
   --function-name polly-tts-lambda \
-  --cors 'AllowOrigins=["http://localhost:8080"],AllowMethods=["POST","OPTIONS"],AllowHeaders=["Content-Type","Authorization"],MaxAge=600'
+  --cors 'AllowOrigins=["http://localhost:8080"],AllowMethods=["POST"],AllowHeaders=["Content-Type","Authorization"],MaxAge=600'
 ```
 ---
 ```
@@ -342,7 +344,7 @@ root@DESKTOP-D6A344Q:/home/AI-AWS-Polly# aws lambda add-permission \
 AWS_REGION=ap-northeast-2 \
 LAMBDA_NAME=polly-tts-lambda \
 ROLE_NAME=polly-tts-lambda-role \
-POLLY_S3_BUCKET=polly-bucket-edumgt \
+POLLY_S3_BUCKET=edumgt-20260402-14-test \
 CORS_ALLOW_ORIGIN='http://localhost:8080' \
 ./infra/aws-cli-deploy-lambda.sh
 ```
@@ -365,7 +367,7 @@ node index.js
 ---
 ```
 export AWS_REGION=ap-northeast-2
-export POLLY_S3_BUCKET=polly-bucket-edumgt
+export POLLY_S3_BUCKET=edumgt-20260402-14-test
 export POLLY_S3_PREFIX=polly-lab/
 node index.js
 ```

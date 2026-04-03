@@ -5,7 +5,7 @@ set -euo pipefail
 AWS_REGION=ap-northeast-2
 LAMBDA_NAME=polly-tts-lambda
 ROLE_NAME=polly-tts-lambda-role
-POLLY_S3_BUCKET=polly-bucket-edumgt
+POLLY_S3_BUCKET=edumgt-20260402-14-test
 CORS_ALLOW_ORIGIN='*'
 
 
@@ -322,12 +322,24 @@ if ! aws lambda get-function-url-config --function-name "$LAMBDA_NAME" >/dev/nul
   aws lambda create-function-url-config --function-name "$LAMBDA_NAME" --auth-type NONE >/dev/null
 fi
 
+aws lambda update-function-url-config \
+  --function-name "$LAMBDA_NAME" \
+  --auth-type NONE \
+  --cors "{\"AllowOrigins\":[\"${CORS_ALLOW_ORIGIN}\"],\"AllowMethods\":[\"POST\"],\"AllowHeaders\":[\"Content-Type\",\"Authorization\"],\"ExposeHeaders\":[\"Content-Type\"],\"MaxAge\":600}" >/dev/null
+
 aws lambda add-permission \
   --function-name "$LAMBDA_NAME" \
   --statement-id FunctionURLAllowPublicAccess \
   --action lambda:InvokeFunctionUrl \
   --principal "*" \
   --function-url-auth-type NONE >/dev/null 2>&1 || true
+
+aws lambda add-permission \
+  --function-name "$LAMBDA_NAME" \
+  --statement-id UrlPolicyInvokeFunctionPublic \
+  --action lambda:InvokeFunction \
+  --principal "*" \
+  --invoked-via-function-url >/dev/null 2>&1 || true
 
 FUNCTION_URL="$(aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --query FunctionUrl --output text)"
 

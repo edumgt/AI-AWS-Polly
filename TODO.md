@@ -6,7 +6,7 @@
 ```
 debian@DESKTOP-OJOTK17:~/project/AI-AWS-Polly$ aws s3 ls
 2026-01-17 20:48:14 elasticbeanstalk-ap-northeast-2-086015456585
-2026-02-07 22:32:34 polly-bucket-edumgt
+2026-02-07 22:32:34 edumgt-20260402-14-test
 2025-12-16 10:39:27 www.edumgt.co.kr
 2025-12-16 13:17:12 www.edumgt.co.kr.log
 debian@DESKTOP-OJOTK17:~/project/AI-AWS-Polly$ aws s3 help

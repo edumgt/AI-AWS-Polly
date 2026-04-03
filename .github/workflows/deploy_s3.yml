@@ -11,7 +11,7 @@ permissions:
 
 env:
   AWS_REGION: ap-northeast-2
-  S3_BUCKET: polly-bucket-edumgt
+  S3_BUCKET: edumgt-20260402-14-test
   BUILD_DIR: frontend
 
 jobs:
