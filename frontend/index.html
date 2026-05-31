@@ -3,46 +3,133 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Polly Lambda TTS Player</title>
+    <title>Polly TTS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Text:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>Amazon Polly TTS (Lambda + S3) Ver. 0.2</h1>
-      <p>텍스트를 입력하면 MP3를 S3에 저장하고, 즉시 재생합니다.</p>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <button class="icon-btn" id="menuBtn" aria-label="메뉴">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <span class="sidebar-logo">Polly TTS</span>
+      </div>
 
-      <label for="apiUrl">Lambda Function URL</label>
-      <input id="apiUrl" type="text"
-      value="https://2jo52ugrpxfmdnkbqqetznpfoa0banot.lambda-url.ap-northeast-2.on.aws/">
+      <button class="new-chat-btn" id="newChatBtn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        새 변환
+      </button>
 
-      <label for="text">텍스트</label>
-      <textarea id="text" rows="6" placeholder="안녕하세요. AWS Polly 람다 실습입니다."
-      >원하시면, 지금  맞춰서 정확히 어떤 경로가 되는지 확인</textarea>
+      <div class="sidebar-section-title">설정</div>
 
-      <div class="row">
-        <div>
-          <label for="voiceId">Voice</label>
-          <select id="voiceId">
-            <option>Seoyeon</option>
-            <option>Jihye</option>
-            <option>Matthew</option>
-          </select>
-        </div>
-        <div>
-          <label for="engine">Engine</label>
-          <select id="engine">
-            <option value="standard">standard</option>
-            <option value="neural" selected>neural</option>
-          </select>
+      <div class="settings-group">
+        <label class="settings-label">Lambda / API URL</label>
+        <input id="apiUrl" type="text" class="settings-input" placeholder="http://localhost:3001" />
+      </div>
+
+      <div class="settings-group">
+        <label class="settings-label">Voice</label>
+        <div class="chip-group" id="voiceChips">
+          <button class="chip selected" data-value="Seoyeon">Seoyeon</button>
+          <button class="chip" data-value="Jihye">Jihye</button>
+          <button class="chip" data-value="Matthew">Matthew</button>
+          <button class="chip" data-value="Joanna">Joanna</button>
+          <button class="chip" data-value="Aria">Aria</button>
         </div>
       </div>
 
-      <button id="synthesizeBtn">MP3 생성 & 재생</button>
-      <pre id="status"></pre>
+      <div class="settings-group">
+        <label class="settings-label">Engine</label>
+        <div class="chip-group" id="engineChips">
+          <button class="chip" data-value="standard">standard</button>
+          <button class="chip selected" data-value="neural">neural</button>
+          <button class="chip" data-value="generative">generative</button>
+          <button class="chip" data-value="long-form">long-form</button>
+        </div>
+      </div>
 
-      <audio id="player" controls></audio>
-    </main>
+      <div class="sidebar-section-title sidebar-history-title">변환 기록</div>
+      <div class="history-list" id="historyList"></div>
+    </aside>
 
-    <script src="app.js?v=20260223-1"></script>
+    <!-- Mobile backdrop -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- Main -->
+    <div class="main-wrapper">
+      <header class="topbar">
+        <button class="icon-btn topbar-menu" id="topbarMenuBtn" aria-label="메뉴">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <span class="topbar-title">Polly TTS</span>
+      </header>
+
+      <!-- Chat area -->
+      <main class="chat-area" id="chatArea">
+        <!-- Empty state -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-logo">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <defs>
+                <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#4285F4"/>
+                  <stop offset="33%" stop-color="#9C27B0"/>
+                  <stop offset="66%" stop-color="#EA4335"/>
+                  <stop offset="100%" stop-color="#FBBC04"/>
+                </linearGradient>
+              </defs>
+              <circle cx="24" cy="24" r="22" stroke="url(#logoGrad)" stroke-width="3" fill="none"/>
+              <path d="M16 24c0-4.4 3.6-8 8-8s8 3.6 8 8-3.6 8-8 8" stroke="url(#logoGrad)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+              <circle cx="24" cy="24" r="3" fill="url(#logoGrad)"/>
+            </svg>
+          </div>
+          <h1 class="empty-title">무엇을 읽어드릴까요?</h1>
+          <p class="empty-subtitle">텍스트를 입력하면 Amazon Polly가 음성으로 변환합니다</p>
+          <div class="suggestion-chips">
+            <button class="suggestion-chip" data-text="안녕하세요. AWS Polly 음성 합성 서비스입니다.">한국어 예시</button>
+            <button class="suggestion-chip" data-text="Hello! This is Amazon Polly text-to-speech service.">English sample</button>
+            <button class="suggestion-chip" data-text="The quick brown fox jumps over the lazy dog.">pangram</button>
+          </div>
+        </div>
+
+        <!-- Messages container -->
+        <div class="messages" id="messages"></div>
+      </main>
+
+      <!-- Input bar -->
+      <div class="input-bar">
+        <div class="input-container">
+          <textarea
+            id="textInput"
+            class="text-input"
+            placeholder="텍스트를 입력하세요..."
+            rows="1"
+            maxlength="3000"
+          ></textarea>
+          <div class="input-actions">
+            <span class="char-count" id="charCount">0 / 3000</span>
+            <button class="send-btn" id="sendBtn" aria-label="음성 생성" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p class="input-hint">Amazon Polly · AWS S3 저장 · <span id="currentVoice">Seoyeon</span> · <span id="currentEngine">neural</span></p>
+      </div>
+
+      <!-- Site footer -->
+      <footer class="site-footer">
+        <span>(주)에듀엠지티</span>
+        <span class="site-footer-dot">·</span>
+        <a href="http://www.edumgt.co.kr" target="_blank" rel="noopener" class="site-footer-link">www.edumgt.co.kr</a>
+      </footer>
+    </div>
+
+    <script src="./app.js"></script>
   </body>
 </html>

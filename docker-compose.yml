@@ -12,10 +12,16 @@ services:
       - POLLY_S3_BUCKET=${POLLY_S3_BUCKET}
       - POLLY_S3_PREFIX=${POLLY_S3_PREFIX:-polly-lab/}
       - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN:-*}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   frontend:
     build: ./frontend
     ports:
       - "8080:8080"
     depends_on:
-      - server
+      server:
+        condition: service_healthy

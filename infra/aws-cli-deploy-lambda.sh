@@ -15,8 +15,8 @@ CORS_ALLOW_ORIGIN='*'
 : "${ROLE_NAME:?ROLE_NAME is required}"
 : "${POLLY_S3_BUCKET:?POLLY_S3_BUCKET is required}"
 
-RUNTIME="${RUNTIME:-nodejs20.x}"
-HANDLER="${HANDLER:-handler.handler}"
+RUNTIME="${RUNTIME:-python3.12}"
+HANDLER="${HANDLER:-handler.lambda_handler}"
 ZIP_FILE="${ZIP_FILE:-lambda.zip}"
 
 CORS_ALLOW_ORIGIN="${CORS_ALLOW_ORIGIN:-*}"
@@ -246,11 +246,11 @@ log "Region: $AWS_REGION"
 log "[0/8] Prereq"
 ensure_zip
 
-log "[1/8] Lambda dependency install + package"
+log "[1/8] Lambda package"
 pushd lambda >/dev/null
-npm install --omit=dev
 rm -f "../${ZIP_FILE}"
-zip -rq "../${ZIP_FILE}" .
+# boto3 is pre-installed in the Lambda Python runtime — zip handler only
+zip -q "../${ZIP_FILE}" handler.py
 popd >/dev/null
 
 log "[2/8] IAM role create (if not exists)"

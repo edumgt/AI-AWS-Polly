@@ -1,200 +1,312 @@
-// app.js (refactored)
+const CACHE_KEY = "polly-api-url";
+const DEFAULT_API = "http://localhost:3001";
+const DEFAULT_TIMEOUT_MS = 30_000;
 
-const el = {
-  apiUrl: document.getElementById("apiUrl"),
-  text: document.getElementById("text"),
-  voiceId: document.getElementById("voiceId"),
-  engine: document.getElementById("engine"),
-  button: document.getElementById("synthesizeBtn"),
-  status: document.getElementById("status"),
-  player: document.getElementById("player"),
+// ─── State ───
+const state = {
+  apiUrl: localStorage.getItem(CACHE_KEY) || DEFAULT_API,
+  voice: "Seoyeon",
+  engine: "neural",
+  loading: false,
+  history: [],
 };
 
-const cacheKey = "polly-lambda-url";
-const DEFAULT_TIMEOUT_MS = 25_000;
+// ─── DOM refs ───
+const $ = (id) => document.getElementById(id);
+const dom = {
+  sidebar:        $("sidebar"),
+  backdrop:       $("sidebarBackdrop"),
+  menuBtn:        $("menuBtn"),
+  topbarMenuBtn:  $("topbarMenuBtn"),
+  newChatBtn:     $("newChatBtn"),
+  apiUrl:         $("apiUrl"),
+  voiceChips:     $("voiceChips"),
+  engineChips:    $("engineChips"),
+  chatArea:       $("chatArea"),
+  emptyState:     $("emptyState"),
+  messages:       $("messages"),
+  textInput:      $("textInput"),
+  charCount:      $("charCount"),
+  sendBtn:        $("sendBtn"),
+  historyList:    $("historyList"),
+  currentVoice:   $("currentVoice"),
+  currentEngine:  $("currentEngine"),
+};
 
-el.apiUrl.value = localStorage.getItem(cacheKey) || "";
+// ─── Init ───
+function init() {
+  dom.apiUrl.value = state.apiUrl;
 
-function setStatus(message, isError = false) {
-  el.status.textContent = message;
-  el.status.style.color = isError ? "#b91c1c" : "#1f2937";
+  dom.textInput.addEventListener("input", onTextInput);
+  dom.textInput.addEventListener("keydown", onKeyDown);
+  dom.sendBtn.addEventListener("click", handleSend);
+  dom.newChatBtn.addEventListener("click", clearChat);
+  dom.menuBtn.addEventListener("click", toggleSidebar);
+  dom.topbarMenuBtn.addEventListener("click", toggleSidebar);
+  dom.backdrop.addEventListener("click", closeSidebar);
+  dom.apiUrl.addEventListener("change", () => {
+    state.apiUrl = dom.apiUrl.value.trim().replace(/\/+$/, "") || DEFAULT_API;
+    localStorage.setItem(CACHE_KEY, state.apiUrl);
+  });
+
+  // Chip groups
+  setupChips(dom.voiceChips, "voice");
+  setupChips(dom.engineChips, "engine");
+
+  // Suggestion chips
+  document.querySelectorAll(".suggestion-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      dom.textInput.value = btn.dataset.text;
+      onTextInput();
+      dom.textInput.focus();
+    });
+  });
+
+  updateHint();
 }
 
-function normalizeUrl(url) {
-  return String(url || "").trim().replace(/\/+$/, "");
+function setupChips(container, key) {
+  container.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      container.querySelectorAll(".chip").forEach((c) => c.classList.remove("selected"));
+      chip.classList.add("selected");
+      state[key] = chip.dataset.value;
+      updateHint();
+    });
+  });
 }
 
-function preview(text, n = 500) {
-  const s = String(text ?? "");
-  return s.length > n ? s.slice(0, n) + "..." : s;
+function updateHint() {
+  dom.currentVoice.textContent = state.voice;
+  dom.currentEngine.textContent = state.engine;
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+function isMobile() {
+  return window.innerWidth <= 768;
 }
 
-/**
- * 안전한 fetch:
- * - 항상 res.text()로 받고,
- * - content-type이 JSON이면 JSON 파싱 시도,
- * - 아니면 raw 그대로 둠
- */
-async function fetchSmart(url, options = {}, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error("timeout")), timeoutMs);
+function toggleSidebar() {
+  if (isMobile()) {
+    const opening = !dom.sidebar.classList.contains("open");
+    dom.sidebar.classList.toggle("open");
+    dom.backdrop.classList.toggle("active", opening);
+  } else {
+    document.body.classList.toggle("sidebar-collapsed");
+  }
+}
+
+function closeSidebar() {
+  dom.sidebar.classList.remove("open");
+  dom.backdrop.classList.remove("active");
+}
+
+function onTextInput() {
+  const len = dom.textInput.value.length;
+  dom.charCount.textContent = `${len} / 3000`;
+  dom.sendBtn.disabled = len === 0 || state.loading;
+  autoResize(dom.textInput);
+}
+
+function autoResize(el) {
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 200) + "px";
+}
+
+function onKeyDown(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (!dom.sendBtn.disabled) handleSend();
+  }
+}
+
+function clearChat() {
+  dom.messages.innerHTML = "";
+  dom.emptyState.style.display = "";
+  state.history = [];
+  dom.historyList.innerHTML = "";
+}
+
+// ─── Message rendering ───
+function showEmpty(show) {
+  dom.emptyState.style.display = show ? "" : "none";
+}
+
+function appendUserMessage(text) {
+  showEmpty(false);
+  const el = document.createElement("div");
+  el.className = "message";
+  el.innerHTML = `
+    <div class="msg-avatar user">나</div>
+    <div class="msg-content">
+      <div class="user-bubble">${escapeHtml(text)}</div>
+    </div>`;
+  dom.messages.appendChild(el);
+  scrollBottom();
+  return el;
+}
+
+function appendLoadingCard() {
+  showEmpty(false);
+  const el = document.createElement("div");
+  el.className = "message";
+  el.innerHTML = `
+    <div class="msg-avatar assistant">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="2" fill="none"/>
+        <path d="M8 12c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+      </svg>
+    </div>
+    <div class="msg-content">
+      <div class="assistant-card">
+        <div class="loading-dots"><span></span><span></span><span></span></div>
+      </div>
+    </div>`;
+  dom.messages.appendChild(el);
+  scrollBottom();
+  return el;
+}
+
+function replaceWithAudioCard(el, data, voiceId, engine) {
+  const meta = el.querySelector(".assistant-card");
+  const s3Key = data.s3Key || "";
+  const keyShort = s3Key.split("/").pop() || s3Key;
+  const expires = data.expiresIn ? `${Math.floor(data.expiresIn / 60)}분` : "60분";
+
+  meta.innerHTML = `
+    <div class="card-meta">
+      <span class="card-badge">${escapeHtml(engine)}</span>
+      <span class="card-badge">${escapeHtml(voiceId)}</span>
+      <span>${escapeHtml(keyShort)}</span>
+      <span>· URL 만료 ${expires}</span>
+    </div>
+    <div class="audio-player-wrap">
+      <audio controls src="${escapeAttr(data.audioUrl)}"></audio>
+    </div>
+    <div class="card-actions">
+      <button class="card-action-btn" onclick="copyUrl('${escapeAttr(data.audioUrl)}')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/></svg>
+        URL 복사
+      </button>
+      <a class="card-action-btn" href="${escapeAttr(data.audioUrl)}" download>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 15V3M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        다운로드
+      </a>
+    </div>`;
+
+  const audio = meta.querySelector("audio");
+  audio.play().catch(() => {});
+  scrollBottom();
+}
+
+function replaceWithError(el, msg) {
+  const card = el.querySelector(".assistant-card");
+  card.outerHTML = `
+    <div class="error-card">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#B91C1C" stroke-width="2"/><path d="M12 8v4M12 16h.01" stroke="#B91C1C" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>${escapeHtml(msg)}</span>
+    </div>`;
+  scrollBottom();
+}
+
+function addToHistory(text) {
+  const item = document.createElement("div");
+  item.className = "history-item";
+  item.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    ${escapeHtml(text.slice(0, 60))}${text.length > 60 ? "…" : ""}`;
+  item.addEventListener("click", () => {
+    dom.textInput.value = text;
+    onTextInput();
+    dom.textInput.focus();
+  });
+  dom.historyList.prepend(item);
+}
+
+function scrollBottom() {
+  requestAnimationFrame(() => {
+    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+  });
+}
+
+// ─── Core action ───
+async function handleSend() {
+  const text = dom.textInput.value.trim();
+  if (!text || state.loading) return;
+
+  const apiUrl = state.apiUrl;
+  const voiceId = state.voice;
+  const engine = state.engine;
+
+  dom.textInput.value = "";
+  dom.textInput.style.height = "auto";
+  onTextInput();
+
+  appendUserMessage(text);
+  addToHistory(text);
+
+  state.loading = true;
+  dom.sendBtn.disabled = true;
+
+  const loadingEl = appendLoadingCard();
 
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
+    const data = await callApi(apiUrl, { text, textType: "text", voiceId, engine, format: "mp3" });
+    replaceWithAudioCard(loadingEl, data, voiceId, engine);
+  } catch (err) {
+    replaceWithError(loadingEl, err.message || String(err));
+  } finally {
+    state.loading = false;
+    onTextInput();
+  }
+}
 
-    const contentType = (res.headers.get("content-type") || "").toLowerCase();
-    const raw = await res.text();
+async function callApi(baseUrl, payload) {
+  const url = `${baseUrl.replace(/\/+$/, "")}/synthesize`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
-    let json = null;
-    if (contentType.includes("application/json")) {
-      try {
-        json = raw ? JSON.parse(raw) : {};
-      } catch {
-        // content-type은 json인데 파싱 실패 → json=null로 유지
-        json = null;
-      }
-    }
-
-    return {
-      ok: res.ok,
-      status: res.status,
-      statusText: res.statusText,
-      contentType,
-      raw,
-      json, // JSON이면 object, 아니면 null
-    };
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    throw new Error(e?.name === "AbortError" ? `요청 시간 초과 (${DEFAULT_TIMEOUT_MS / 1000}s)` : (e?.message || String(e)));
   } finally {
     clearTimeout(timer);
   }
-}
 
-function buildPayload() {
-  const text = el.text.value.trim();
-  const voiceId = el.voiceId.value;
-  const engine = el.engine.value;
+  const raw = await res.text();
+  let json = null;
+  try { json = JSON.parse(raw); } catch { /* not json */ }
 
-  return {
-    text,
-    textType: "text",
-    voiceId,
-    engine,
-    format: "mp3",
-  };
-}
-
-function validateInputs() {
-  const apiUrl = normalizeUrl(el.apiUrl.value);
-  const text = el.text.value.trim();
-
-  if (!apiUrl) return { ok: false, message: "Lambda Function URL을 입력하세요." };
-  if (!/^https?:\/\//i.test(apiUrl)) return { ok: false, message: "URL 형식이 올바르지 않습니다. (http/https)" };
-  if (!text) return { ok: false, message: "텍스트를 입력하세요." };
-
-  return { ok: true, apiUrl };
-}
-
-function lockUI(locked) {
-  el.button.disabled = locked;
-  el.apiUrl.disabled = locked;
-  el.text.disabled = locked;
-  el.voiceId.disabled = locked;
-  el.engine.disabled = locked;
-}
-
-async function synthesize() {
-  const v = validateInputs();
-  if (!v.ok) return setStatus(v.message, true);
-
-  const apiUrl = v.apiUrl;
-  localStorage.setItem(cacheKey, apiUrl);
-
-  lockUI(true);
-  setStatus("음성 생성 중...");
-
-  // (선택) 아주 짧은 딜레이로 UI 반응 보장
-  await sleep(30);
-
-  try {
-    const payload = buildPayload();
-
-    const result = await fetchSmart(
-      apiUrl,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      },
-      { timeoutMs: DEFAULT_TIMEOUT_MS }
-    );
-
-    // 실패 처리: JSON이면 error 필드 우선, 아니면 raw 프리뷰
-    if (!result.ok) {
-      const serverMsg =
-        (result.json && (result.json.error || result.json.message)) ||
-        preview(result.raw, 500) ||
-        "(empty body)";
-
-      setStatus(
-        [
-          `요청 실패: HTTP ${result.status} ${result.statusText}`,
-          `content-type: ${result.contentType || "(none)"}`,
-          `body: ${serverMsg}`,
-        ].join("\n"),
-        true
-      );
-      return;
-    }
-
-    // 성공인데 JSON이 아닐 때
-    if (!result.json) {
-      setStatus(
-        [
-          `성공 응답이지만 JSON이 아닙니다.`,
-          `HTTP ${result.status} ${result.statusText}`,
-          `content-type: ${result.contentType || "(none)"}`,
-          `body: ${preview(result.raw, 500)}`,
-        ].join("\n"),
-        true
-      );
-      return;
-    }
-
-    const data = result.json;
-
-    if (!data.audioUrl) {
-      setStatus(
-        [
-          `성공 응답(JSON)인데 audioUrl이 없습니다.`,
-          `JSON: ${preview(JSON.stringify(data, null, 2), 800)}`,
-        ].join("\n"),
-        true
-      );
-      return;
-    }
-
-    el.player.src = data.audioUrl;
-
-    try {
-      await el.player.play();
-    } catch {
-      // 자동재생 정책 때문에 play()가 막힐 수 있음
-    }
-
-    setStatus(`완료: ${data.s3Key || "(no key)"}\n재생 URL 만료(초): ${data.expiresIn || "(unknown)"}`);
-  } catch (err) {
-    const msg =
-      err?.name === "AbortError"
-        ? `요청 시간 초과 (${DEFAULT_TIMEOUT_MS / 1000}s)`
-        : (err?.message || String(err));
-
-    setStatus(`오류: ${msg}`, true);
-  } finally {
-    lockUI(false);
+  if (!res.ok) {
+    const msg = json?.error || json?.message || raw.slice(0, 300) || `HTTP ${res.status}`;
+    throw new Error(`서버 오류 (${res.status}): ${msg}`);
   }
+  if (!json?.audioUrl) {
+    throw new Error("응답에 audioUrl이 없습니다: " + raw.slice(0, 300));
+  }
+  return json;
 }
 
-el.button.addEventListener("click", synthesize);
+// ─── Helpers ───
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function escapeAttr(s) {
+  return String(s ?? "").replace(/"/g, "&quot;");
+}
+
+window.copyUrl = function (url) {
+  navigator.clipboard.writeText(url).catch(() => {});
+};
+
+init();
