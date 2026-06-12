@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Polly TTS</title>
+    <title>Multi-Engine TTS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Text:wght@400;500&display=swap" rel="stylesheet" />
@@ -16,7 +16,7 @@
         <button class="icon-btn" id="menuBtn" aria-label="메뉴">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
-        <span class="sidebar-logo">Polly TTS</span>
+        <span class="sidebar-logo">TTS Studio</span>
       </div>
 
       <button class="new-chat-btn" id="newChatBtn">
@@ -24,32 +24,63 @@
         새 변환
       </button>
 
-      <div class="sidebar-section-title">설정</div>
+      <div class="sidebar-section-title">TTS 엔진</div>
+      <div class="provider-grid" id="providerGrid">
+        <!-- Populated by JS -->
+        <div class="provider-skeleton"></div>
+        <div class="provider-skeleton"></div>
+        <div class="provider-skeleton"></div>
+        <div class="provider-skeleton"></div>
+        <div class="provider-skeleton"></div>
+        <div class="provider-skeleton"></div>
+      </div>
+
+      <!-- AWS Polly Settings -->
+      <div id="pollySettings">
+        <div class="settings-group">
+          <label class="settings-label">Voice</label>
+          <div class="chip-group" id="voiceChips">
+            <button class="chip selected" data-value="Seoyeon">Seoyeon</button>
+            <button class="chip" data-value="Jihye">Jihye</button>
+            <button class="chip" data-value="Matthew">Matthew</button>
+            <button class="chip" data-value="Joanna">Joanna</button>
+            <button class="chip" data-value="Aria">Aria</button>
+          </div>
+        </div>
+        <div class="settings-group">
+          <label class="settings-label">Engine</label>
+          <div class="chip-group" id="engineChips">
+            <button class="chip" data-value="standard">standard</button>
+            <button class="chip selected" data-value="neural">neural</button>
+            <button class="chip" data-value="generative">generative</button>
+            <button class="chip" data-value="long-form">long-form</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Open-source Engine Settings -->
+      <div id="ossSettings" style="display:none">
+        <div class="settings-group" id="languageGroup">
+          <label class="settings-label">언어</label>
+          <div class="chip-group" id="languageChips">
+            <button class="chip selected" data-value="ko">한국어</button>
+            <button class="chip" data-value="en">English</button>
+            <button class="chip" data-value="ja">日本語</button>
+            <button class="chip" data-value="zh-cn">中文</button>
+          </div>
+        </div>
+        <div class="settings-group" id="speakerGroup">
+          <label class="settings-label">화자 / 프리셋</label>
+          <select id="speakerSelect" class="settings-select">
+            <option value="">기본 화자</option>
+          </select>
+        </div>
+        <div class="engine-note" id="engineNote" style="display:none"></div>
+      </div>
 
       <div class="settings-group">
         <label class="settings-label">Lambda / API URL</label>
         <input id="apiUrl" type="text" class="settings-input" placeholder="http://localhost:3001" />
-      </div>
-
-      <div class="settings-group">
-        <label class="settings-label">Voice</label>
-        <div class="chip-group" id="voiceChips">
-          <button class="chip selected" data-value="Seoyeon">Seoyeon</button>
-          <button class="chip" data-value="Jihye">Jihye</button>
-          <button class="chip" data-value="Matthew">Matthew</button>
-          <button class="chip" data-value="Joanna">Joanna</button>
-          <button class="chip" data-value="Aria">Aria</button>
-        </div>
-      </div>
-
-      <div class="settings-group">
-        <label class="settings-label">Engine</label>
-        <div class="chip-group" id="engineChips">
-          <button class="chip" data-value="standard">standard</button>
-          <button class="chip selected" data-value="neural">neural</button>
-          <button class="chip" data-value="generative">generative</button>
-          <button class="chip" data-value="long-form">long-form</button>
-        </div>
       </div>
 
       <div class="sidebar-section-title sidebar-history-title">변환 기록</div>
@@ -65,12 +96,11 @@
         <button class="icon-btn topbar-menu" id="topbarMenuBtn" aria-label="메뉴">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
-        <span class="topbar-title">Polly TTS</span>
+        <span class="topbar-title">TTS Studio</span>
       </header>
 
       <!-- Chat area -->
       <main class="chat-area" id="chatArea">
-        <!-- Empty state -->
         <div class="empty-state" id="emptyState">
           <div class="empty-logo">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
@@ -88,15 +118,13 @@
             </svg>
           </div>
           <h1 class="empty-title">무엇을 읽어드릴까요?</h1>
-          <p class="empty-subtitle">텍스트를 입력하면 Amazon Polly가 음성으로 변환합니다</p>
+          <p class="empty-subtitle" id="emptySubtitle">TTS 엔진을 선택하고 텍스트를 입력하면 음성으로 변환합니다</p>
           <div class="suggestion-chips">
-            <button class="suggestion-chip" data-text="안녕하세요. AWS Polly 음성 합성 서비스입니다.">한국어 예시</button>
-            <button class="suggestion-chip" data-text="Hello! This is Amazon Polly text-to-speech service.">English sample</button>
-            <button class="suggestion-chip" data-text="The quick brown fox jumps over the lazy dog.">pangram</button>
+            <button class="suggestion-chip" data-text="안녕하세요. 멀티 엔진 TTS 서비스입니다. 다양한 음성 합성 기술을 비교해 보세요.">한국어 예시</button>
+            <button class="suggestion-chip" data-text="Hello! This is a multi-engine text-to-speech service. Try different engines and compare the results.">English sample</button>
+            <button class="suggestion-chip" data-text="[웃음] 정말 대단한 기술이네요! [한숨] 이렇게 자연스럽게 말할 수 있다니...">Bark 비언어 표현</button>
           </div>
         </div>
-
-        <!-- Messages container -->
         <div class="messages" id="messages"></div>
       </main>
 
@@ -119,10 +147,9 @@
             </button>
           </div>
         </div>
-        <p class="input-hint">Amazon Polly · AWS S3 저장 · <span id="currentVoice">Seoyeon</span> · <span id="currentEngine">neural</span></p>
+        <p class="input-hint" id="inputHint">엔진을 선택하세요</p>
       </div>
 
-      <!-- Site footer -->
       <footer class="site-footer">
         <span>(주)에듀엠지티</span>
         <span class="site-footer-dot">·</span>

@@ -1,14 +1,20 @@
 const CACHE_KEY = "polly-api-url";
 const DEFAULT_API = "http://localhost:3001";
-const DEFAULT_TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 180_000; // 3 min — Tortoise/Bark can be slow
 
 // ─── State ───
 const state = {
   apiUrl: localStorage.getItem(CACHE_KEY) || DEFAULT_API,
+  provider: "polly",
+  // Polly-specific
   voice: "Seoyeon",
   engine: "neural",
+  // Open-source engine params
+  language: "ko",
+  speaker: "",
+  // Runtime
   loading: false,
-  history: [],
+  engines: [],   // engine info list from /engines
 };
 
 // ─── DOM refs ───
@@ -20,21 +26,32 @@ const dom = {
   topbarMenuBtn:  $("topbarMenuBtn"),
   newChatBtn:     $("newChatBtn"),
   apiUrl:         $("apiUrl"),
+  providerGrid:   $("providerGrid"),
+  // Polly
+  pollySettings:  $("pollySettings"),
   voiceChips:     $("voiceChips"),
   engineChips:    $("engineChips"),
+  // OSS engines
+  ossSettings:    $("ossSettings"),
+  languageGroup:  $("languageGroup"),
+  languageChips:  $("languageChips"),
+  speakerGroup:   $("speakerGroup"),
+  speakerSelect:  $("speakerSelect"),
+  engineNote:     $("engineNote"),
+  // Chat
   chatArea:       $("chatArea"),
   emptyState:     $("emptyState"),
+  emptySubtitle:  $("emptySubtitle"),
   messages:       $("messages"),
   textInput:      $("textInput"),
   charCount:      $("charCount"),
   sendBtn:        $("sendBtn"),
+  inputHint:      $("inputHint"),
   historyList:    $("historyList"),
-  currentVoice:   $("currentVoice"),
-  currentEngine:  $("currentEngine"),
 };
 
 // ─── Init ───
-function init() {
+async function init() {
   dom.apiUrl.value = state.apiUrl;
 
   dom.textInput.addEventListener("input", onTextInput);
@@ -47,13 +64,18 @@ function init() {
   dom.apiUrl.addEventListener("change", () => {
     state.apiUrl = dom.apiUrl.value.trim().replace(/\/+$/, "") || DEFAULT_API;
     localStorage.setItem(CACHE_KEY, state.apiUrl);
+    fetchEngines();
   });
 
-  // Chip groups
   setupChips(dom.voiceChips, "voice");
   setupChips(dom.engineChips, "engine");
+  setupChips(dom.languageChips, "language");
 
-  // Suggestion chips
+  dom.speakerSelect.addEventListener("change", () => {
+    state.speaker = dom.speakerSelect.value;
+    updateHint();
+  });
+
   document.querySelectorAll(".suggestion-chip").forEach((btn) => {
     btn.addEventListener("click", () => {
       dom.textInput.value = btn.dataset.text;
@@ -62,9 +84,122 @@ function init() {
     });
   });
 
-  updateHint();
+  await fetchEngines();
 }
 
+// ─── Engine list from backend ───
+async function fetchEngines() {
+  try {
+    const res = await fetch(`${state.apiUrl}/engines`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.engines = await res.json();
+  } catch {
+    // Fallback: show static providers, all marked unavailable except Polly
+    state.engines = [
+      { id: "polly",    name: "AWS Polly",     available: true,  description: "Amazon 관리형 신경망 TTS" },
+      { id: "bark",     name: "Bark",           available: false, description: "비언어 표현 지원 TTS" },
+      { id: "coqui",    name: "Coqui XTTS v2", available: false, description: "음성 복제 TTS" },
+      { id: "vits",     name: "VITS",           available: false, description: "경량 고속 TTS" },
+      { id: "chattts",  name: "ChatTTS",        available: false, description: "대화형 TTS" },
+      { id: "tortoise", name: "Tortoise TTS",   available: false, description: "고품질 TTS" },
+    ];
+  }
+  renderProviderGrid();
+}
+
+function renderProviderGrid() {
+  dom.providerGrid.innerHTML = "";
+  state.engines.forEach((eng) => {
+    const btn = document.createElement("button");
+    btn.className = "provider-btn" + (eng.available ? "" : " unavailable") + (eng.id === state.provider ? " selected" : "");
+    btn.disabled = !eng.available;
+    btn.dataset.id = eng.id;
+    btn.title = eng.available ? eng.description : `미설치 — pip install 필요`;
+
+    const statusText = eng.available ? "사용 가능" : "미설치";
+    btn.innerHTML = `
+      <span class="provider-name">${escapeHtml(eng.name)}</span>
+      <span class="provider-status ${eng.available ? "ok" : "na"}">${statusText}</span>`;
+
+    btn.addEventListener("click", () => onProviderChange(eng.id));
+    dom.providerGrid.appendChild(btn);
+  });
+}
+
+function onProviderChange(id) {
+  state.provider = id;
+
+  // Update button selection
+  dom.providerGrid.querySelectorAll(".provider-btn").forEach((b) => {
+    b.classList.toggle("selected", b.dataset.id === id);
+  });
+
+  // Show/hide settings panels
+  const isPolly = id === "polly";
+  dom.pollySettings.style.display = isPolly ? "" : "none";
+  dom.ossSettings.style.display  = isPolly ? "none" : "";
+
+  if (!isPolly) {
+    updateOssSettings(id);
+  }
+
+  updateHint();
+  updateEmptySubtitle();
+}
+
+function updateOssSettings(providerId) {
+  const eng = state.engines.find((e) => e.id === providerId);
+  if (!eng) return;
+
+  // Language chips — show only supported languages
+  const supportedLangs = eng.languages || ["ko", "en"];
+  dom.languageChips.querySelectorAll(".chip").forEach((chip) => {
+    const supported = supportedLangs.includes(chip.dataset.value);
+    chip.style.display = supported ? "" : "none";
+  });
+
+  // Pick first supported language if current not supported
+  if (!supportedLangs.includes(state.language)) {
+    state.language = supportedLangs[0] || "en";
+    dom.languageChips.querySelectorAll(".chip").forEach((chip) => {
+      chip.classList.toggle("selected", chip.dataset.value === state.language);
+    });
+  }
+
+  // Language group: hide if only one language
+  dom.languageGroup.style.display = supportedLangs.length > 1 ? "" : "none";
+
+  // Speaker select
+  const speakers = eng.speakers || [];
+  dom.speakerSelect.innerHTML = "";
+  speakers.forEach((spk) => {
+    const opt = document.createElement("option");
+    opt.value = spk.id;
+    opt.textContent = spk.name;
+    dom.speakerSelect.appendChild(opt);
+  });
+
+  // Default speaker selection
+  state.speaker = speakers.length > 0 ? speakers[0].id : "";
+  dom.speakerGroup.style.display = speakers.length > 0 ? "" : "none";
+
+  // Note
+  if (eng.note) {
+    dom.engineNote.textContent = `ℹ️ ${eng.note}`;
+    dom.engineNote.style.display = "";
+  } else {
+    dom.engineNote.style.display = "none";
+  }
+}
+
+function updateEmptySubtitle() {
+  const eng = state.engines.find((e) => e.id === state.provider);
+  dom.emptySubtitle.textContent = eng
+    ? `${eng.name} — ${eng.description}`
+    : "TTS 엔진을 선택하고 텍스트를 입력하면 음성으로 변환합니다";
+}
+
+// ─── Chip setup ───
 function setupChips(container, key) {
   container.querySelectorAll(".chip").forEach((chip) => {
     chip.addEventListener("click", () => {
@@ -77,13 +212,19 @@ function setupChips(container, key) {
 }
 
 function updateHint() {
-  dom.currentVoice.textContent = state.voice;
-  dom.currentEngine.textContent = state.engine;
+  if (state.provider === "polly") {
+    dom.inputHint.textContent = `AWS Polly · ${state.voice} · ${state.engine}`;
+  } else {
+    const eng = state.engines.find((e) => e.id === state.provider);
+    const name = eng ? eng.name : state.provider;
+    const speakerLabel = dom.speakerSelect.options[dom.speakerSelect.selectedIndex]?.text || state.speaker;
+    const langLabel = { ko: "한국어", en: "English", ja: "日本語", "zh-cn": "中文" }[state.language] || state.language;
+    dom.inputHint.textContent = `${name} · ${langLabel}${speakerLabel ? " · " + speakerLabel : ""}`;
+  }
 }
 
-function isMobile() {
-  return window.innerWidth <= 768;
-}
+// ─── Sidebar ───
+function isMobile() { return window.innerWidth <= 768; }
 
 function toggleSidebar() {
   if (isMobile()) {
@@ -100,6 +241,7 @@ function closeSidebar() {
   dom.backdrop.classList.remove("active");
 }
 
+// ─── Text input ───
 function onTextInput() {
   const len = dom.textInput.value.length;
   dom.charCount.textContent = `${len} / 3000`;
@@ -145,7 +287,7 @@ function appendUserMessage(text) {
   return el;
 }
 
-function appendLoadingCard() {
+function appendLoadingCard(providerName) {
   showEmpty(false);
   const el = document.createElement("div");
   el.className = "message";
@@ -158,7 +300,10 @@ function appendLoadingCard() {
     </div>
     <div class="msg-content">
       <div class="assistant-card">
-        <div class="loading-dots"><span></span><span></span><span></span></div>
+        <div class="loading-wrap">
+          <div class="loading-dots"><span></span><span></span><span></span></div>
+          <span class="loading-label">${escapeHtml(providerName)} 합성 중…</span>
+        </div>
       </div>
     </div>`;
   dom.messages.appendChild(el);
@@ -166,18 +311,19 @@ function appendLoadingCard() {
   return el;
 }
 
-function replaceWithAudioCard(el, data, voiceId, engine) {
+function replaceWithAudioCard(el, data) {
   const meta = el.querySelector(".assistant-card");
   const s3Key = data.s3Key || "";
-  const keyShort = s3Key.split("/").pop() || s3Key;
+  const keyShort = s3Key ? (s3Key.split("/").pop() || s3Key) : "(로컬 임시)";
   const expires = data.expiresIn ? `${Math.floor(data.expiresIn / 60)}분` : "60분";
+  const providerLabel = data.provider || data.engine || "";
+  const voiceLabel = data.voiceId || "";
 
   meta.innerHTML = `
     <div class="card-meta">
-      <span class="card-badge">${escapeHtml(engine)}</span>
-      <span class="card-badge">${escapeHtml(voiceId)}</span>
-      <span>${escapeHtml(keyShort)}</span>
-      <span>· URL 만료 ${expires}</span>
+      <span class="card-badge provider-${escapeAttr(providerLabel)}">${escapeHtml(providerLabel)}</span>
+      ${voiceLabel ? `<span class="card-badge">${escapeHtml(voiceLabel)}</span>` : ""}
+      ${data.savedToS3 ? `<span>${escapeHtml(keyShort)}</span><span>· URL 만료 ${expires}</span>` : `<span>로컬 임시 파일</span>`}
     </div>
     <div class="audio-player-wrap">
       <audio controls src="${escapeAttr(data.audioUrl)}"></audio>
@@ -223,9 +369,7 @@ function addToHistory(text) {
 }
 
 function scrollBottom() {
-  requestAnimationFrame(() => {
-    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
-  });
+  requestAnimationFrame(() => { dom.chatArea.scrollTop = dom.chatArea.scrollHeight; });
 }
 
 // ─── Core action ───
@@ -234,8 +378,9 @@ async function handleSend() {
   if (!text || state.loading) return;
 
   const apiUrl = state.apiUrl;
-  const voiceId = state.voice;
-  const engine = state.engine;
+  const currentProvider = state.provider;
+  const eng = state.engines.find((e) => e.id === currentProvider);
+  const providerName = eng ? eng.name : currentProvider;
 
   dom.textInput.value = "";
   dom.textInput.style.height = "auto";
@@ -247,11 +392,30 @@ async function handleSend() {
   state.loading = true;
   dom.sendBtn.disabled = true;
 
-  const loadingEl = appendLoadingCard();
+  const loadingEl = appendLoadingCard(providerName);
+
+  let payload;
+  if (currentProvider === "polly") {
+    payload = {
+      text,
+      provider: "polly",
+      textType: "text",
+      voiceId: state.voice,
+      engine: state.engine,
+      format: "mp3",
+    };
+  } else {
+    payload = {
+      text,
+      provider: currentProvider,
+      language: state.language,
+      speaker: state.speaker,
+    };
+  }
 
   try {
-    const data = await callApi(apiUrl, { text, textType: "text", voiceId, engine, format: "mp3" });
-    replaceWithAudioCard(loadingEl, data, voiceId, engine);
+    const data = await callApi(apiUrl, payload);
+    replaceWithAudioCard(loadingEl, data);
   } catch (err) {
     replaceWithError(loadingEl, err.message || String(err));
   } finally {
@@ -263,7 +427,7 @@ async function handleSend() {
 async function callApi(baseUrl, payload) {
   const url = `${baseUrl.replace(/\/+$/, "")}/synthesize`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   let res;
   try {
@@ -274,7 +438,11 @@ async function callApi(baseUrl, payload) {
       signal: controller.signal,
     });
   } catch (e) {
-    throw new Error(e?.name === "AbortError" ? `요청 시간 초과 (${DEFAULT_TIMEOUT_MS / 1000}s)` : (e?.message || String(e)));
+    throw new Error(
+      e?.name === "AbortError"
+        ? `요청 시간 초과 (${TIMEOUT_MS / 1000}s) — 모델 로딩 중이거나 서버가 응답하지 않습니다.`
+        : (e?.message || String(e))
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -284,7 +452,7 @@ async function callApi(baseUrl, payload) {
   try { json = JSON.parse(raw); } catch { /* not json */ }
 
   if (!res.ok) {
-    const msg = json?.error || json?.message || raw.slice(0, 300) || `HTTP ${res.status}`;
+    const msg = json?.error || json?.message || raw.slice(0, 400) || `HTTP ${res.status}`;
     throw new Error(`서버 오류 (${res.status}): ${msg}`);
   }
   if (!json?.audioUrl) {
