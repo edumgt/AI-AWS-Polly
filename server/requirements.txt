@@ -3,6 +3,11 @@ uvicorn[standard]==0.32.1
 boto3==1.35.72
 pydantic==2.10.3
 
+# ── ChatTTS (대화형 TTS, 한국어·영어·중국어 지원) ──────────────────────────────
+# requests: chattts 0.2.5 의존성 누락 버그 대응
+chattts
+requests
+
 # ── 오픈소스 TTS 엔진 (선택 설치) ──────────────────────────────────────────────
 # Coqui XTTS v2 + VITS (한국어 CSS10)
 # pip install TTS
@@ -10,11 +15,5 @@ pydantic==2.10.3
 # Bark (Suno AI)
 # pip install suno-bark scipy
 #
-# ChatTTS
-# pip install chattts
-#
 # Tortoise TTS
 # pip install tortoise-tts
-#
-# 전체 일괄 설치 (대용량 주의 ≈ 10+ GB):
-# pip install TTS suno-bark scipy chattts tortoise-tts

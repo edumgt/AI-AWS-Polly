@@ -1,5 +1,5 @@
 const CACHE_KEY = "polly-api-url";
-const DEFAULT_API = "http://localhost:3001";
+const DEFAULT_API = "https://tco2ndlmnklrrmzfr4ttho4jpi0gzrhd.lambda-url.ap-northeast-2.on.aws/";
 const TIMEOUT_MS = 180_000; // 3 min — Tortoise/Bark can be slow
 
 // ─── State ───

@@ -154,7 +154,7 @@ IAM 배포 권한 부여:
 aws iam put-user-policy \
   --user-name devtest2 \
   --policy-name polly-tts-lambda-deploy \
-  --policy-document file://JSON/polly-lambda-deploy.json
+  --policy-document file://json/polly-lambda-deploy.json
 ```
 
 ![alt text](image-5.png)
@@ -173,6 +173,7 @@ sudo ./infra/aws-cli-deploy-lambda.sh
 ```
 
 > **주의**: `POLLY_S3_BUCKET` 버킷명은 전 세계 고유한 이름을 사용하세요.
+> 스크립트는 버킷명이 이미 사용 중이면 새 고유 버킷명으로 자동 전환하고, 그 이름에 맞춰 Lambda IAM 정책도 다시 구성합니다.
 
 #### 배포 충돌 오류 발생 시
 ```
@@ -211,6 +212,12 @@ aws lambda get-function-configuration \
  - S3 Prefix   : polly-lab/
 ```
 
+Lambda Function URL 엔드포인트:
+- `GET /health`
+- `GET /engines`
+- `POST /synthesize`
+- `POST /` (동일 동작)
+
 ![alt text](image-2.png)
 
 ![alt text](image-1.png)
@@ -224,6 +231,7 @@ aws lambda get-function-configuration \
 1. 좌측 사이드바 **API URL** 입력란에 서버 주소 입력
    - Docker 로컬 실행: `http://localhost:3001`
    - Lambda 배포: `https://xxxx.lambda-url.ap-northeast-2.on.aws`
+   - 프론트엔드는 내부적으로 `/engines`, `/synthesize` 경로를 붙여 호출합니다.
 2. **Voice** 칩에서 음성 선택 (Seoyeon, Jihye, Matthew 등)
 3. **Engine** 칩에서 엔진 선택 (neural, standard, generative, long-form)
 4. 하단 입력창에 텍스트 입력 후 **전송 버튼** 클릭 (또는 Enter)
@@ -242,6 +250,11 @@ curl -i -X OPTIONS "https://xxxx.lambda-url.ap-northeast-2.on.aws/" \
   -H "Access-Control-Request-Headers: content-type,authorization"
 ```
 
+헬스체크:
+```bash
+curl "https://xxxx.lambda-url.ap-northeast-2.on.aws/health"
+```
+
 Lambda CORS 설정 업데이트:
 ```bash
 aws lambda update-function-url-config \
@@ -249,7 +262,7 @@ aws lambda update-function-url-config \
   --auth-type NONE \
   --cors '{
     "AllowOrigins":["http://localhost:8080"],
-    "AllowMethods":["POST"],
+    "AllowMethods":["GET","POST","OPTIONS"],
     "AllowHeaders":["content-type"],
     "ExposeHeaders":["content-type"],
     "MaxAge":86400

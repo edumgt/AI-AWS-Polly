@@ -59,9 +59,9 @@ def synthesize(
     except ClientError as e:
         code = e.response["Error"]["Code"]
         msg = e.response["Error"]["Message"]
-        if code == "ValidationException" and "does not support" in msg and engine == "standard":
+        if code == "ValidationException" and "does not support" in msg and engine != "standard":
             try:
-                res = _call("neural")
+                res = _call("standard")
             except ClientError as e2:
                 raise RuntimeError(e2.response["Error"]["Message"]) from e2
         else:

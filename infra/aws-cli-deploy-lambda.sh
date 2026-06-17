@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 사용 예시
-AWS_REGION=ap-northeast-2
-LAMBDA_NAME=polly-tts-lambda
-ROLE_NAME=polly-tts-lambda-role
-POLLY_S3_BUCKET=edumgt-20260402-14-test
-CORS_ALLOW_ORIGIN='*'
-
-
-
 : "${AWS_REGION:?AWS_REGION is required}"
 : "${LAMBDA_NAME:?LAMBDA_NAME is required}"
 : "${ROLE_NAME:?ROLE_NAME is required}"
 : "${POLLY_S3_BUCKET:?POLLY_S3_BUCKET is required}"
 
+LAMBDA_DIR="${LAMBDA_DIR:-lambda}"
 RUNTIME="${RUNTIME:-python3.12}"
 HANDLER="${HANDLER:-handler.lambda_handler}"
 ZIP_FILE="${ZIP_FILE:-lambda.zip}"
@@ -40,14 +32,14 @@ wait_lambda_updated() {
   local fn="$1"
 
   # waiter (있으면 빠르게 기다림)
-  aws lambda wait function-updated --function-name "$fn" >/dev/null 2>&1 || true
+  aws lambda wait function-updated --function-name "$fn" --region "$AWS_REGION" >/dev/null 2>&1 || true
 
   # 안정적으로 State/LastUpdateStatus 폴링
   while true; do
     local last state reason
-    last="$(aws lambda get-function-configuration --function-name "$fn" --query 'LastUpdateStatus' --output text 2>/dev/null || echo "Unknown")"
-    state="$(aws lambda get-function-configuration --function-name "$fn" --query 'State' --output text 2>/dev/null || echo "Unknown")"
-    reason="$(aws lambda get-function-configuration --function-name "$fn" --query 'LastUpdateStatusReason' --output text 2>/dev/null || echo "")"
+    last="$(aws lambda get-function-configuration --function-name "$fn" --region "$AWS_REGION" --query 'LastUpdateStatus' --output text 2>/dev/null || echo "Unknown")"
+    state="$(aws lambda get-function-configuration --function-name "$fn" --region "$AWS_REGION" --query 'State' --output text 2>/dev/null || echo "Unknown")"
+    reason="$(aws lambda get-function-configuration --function-name "$fn" --region "$AWS_REGION" --query 'LastUpdateStatusReason' --output text 2>/dev/null || echo "")"
 
     if [[ "$last" == "Successful" && "$state" == "Active" ]]; then
       break
@@ -115,7 +107,11 @@ ensure_bucket_exists_or_create() {
   local create_out rc
   set +e
  
-  create_out="$(aws s3api create-bucket --bucket "$b" --create-bucket-configuration "LocationConstraint=$AWS_REGION" 2>&1)"
+    if [[ "$AWS_REGION" == "us-east-1" ]]; then
+      create_out="$(aws s3api create-bucket --bucket "$b" 2>&1)"
+    else
+      create_out="$(aws s3api create-bucket --bucket "$b" --create-bucket-configuration "LocationConstraint=$AWS_REGION" 2>&1)"
+    fi
   
   rc=$?
   set -e
@@ -144,7 +140,11 @@ ensure_bucket_exists_or_create() {
 
     # 실제 생성
    
-    aws s3api create-bucket --bucket "$POLLY_S3_BUCKET" --create-bucket-configuration "LocationConstraint=$AWS_REGION" >/dev/null
+    if [[ "$AWS_REGION" == "us-east-1" ]]; then
+      aws s3api create-bucket --bucket "$POLLY_S3_BUCKET" >/dev/null
+    else
+      aws s3api create-bucket --bucket "$POLLY_S3_BUCKET" --create-bucket-configuration "LocationConstraint=$AWS_REGION" >/dev/null
+    fi
 
     log "  - bucket created: $POLLY_S3_BUCKET"
     return 0
@@ -247,7 +247,7 @@ log "[0/8] Prereq"
 ensure_zip
 
 log "[1/8] Lambda package"
-pushd lambda >/dev/null
+pushd "$LAMBDA_DIR" >/dev/null
 rm -f "../${ZIP_FILE}"
 # boto3 is pre-installed in the Lambda Python runtime — zip handler only
 zip -q "../${ZIP_FILE}" handler.py
@@ -263,7 +263,10 @@ if ! aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
   sleep 3
 fi
 
-log "[3/8] Attach policies"
+log "[3/8] Ensure S3 bucket exists (create if missing)"
+ensure_bucket_exists_or_create "$POLLY_S3_BUCKET"
+
+log "[4/8] Attach policies"
 aws iam attach-role-policy \
   --role-name "$ROLE_NAME" \
   --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole >/dev/null || true
@@ -282,15 +285,13 @@ aws iam put-role-policy \
   --policy-name PollyS3Access \
   --policy-document file:///tmp/polly-inline-policy.json >/dev/null
 
-log "[4/8] Ensure S3 bucket exists (create if missing)"
-ensure_bucket_exists_or_create "$POLLY_S3_BUCKET"
-
 log "[5/8] Lambda create/update (conflict-safe)"
-if aws lambda get-function --function-name "$LAMBDA_NAME" >/dev/null 2>&1; then
+if aws lambda get-function --function-name "$LAMBDA_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
   wait_lambda_updated "$LAMBDA_NAME"
 
   aws lambda update-function-code \
     --function-name "$LAMBDA_NAME" \
+    --region "$AWS_REGION" \
     --zip-file "fileb://${ZIP_FILE}" >/dev/null
 
   # ★ 코드 업데이트 완료 대기(필수)
@@ -298,6 +299,7 @@ if aws lambda get-function --function-name "$LAMBDA_NAME" >/dev/null 2>&1; then
 
   retry_on_conflict aws lambda update-function-configuration \
     --function-name "$LAMBDA_NAME" \
+    --region "$AWS_REGION" \
     --runtime "$RUNTIME" \
     --handler "$HANDLER" \
     --environment "Variables={POLLY_S3_BUCKET=${POLLY_S3_BUCKET},POLLY_S3_PREFIX=${POLLY_S3_PREFIX},CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN}}" >/dev/null
@@ -306,6 +308,7 @@ if aws lambda get-function --function-name "$LAMBDA_NAME" >/dev/null 2>&1; then
 else
   aws lambda create-function \
     --function-name "$LAMBDA_NAME" \
+    --region "$AWS_REGION" \
     --runtime "$RUNTIME" \
     --handler "$HANDLER" \
     --role "$ROLE_ARN" \
@@ -314,21 +317,23 @@ else
     --memory-size 256 \
     --environment "Variables={POLLY_S3_BUCKET=${POLLY_S3_BUCKET},POLLY_S3_PREFIX=${POLLY_S3_PREFIX},CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN}}" >/dev/null
 
-  aws lambda wait function-active-v2 --function-name "$LAMBDA_NAME"
+  aws lambda wait function-active-v2 --function-name "$LAMBDA_NAME" --region "$AWS_REGION"
 fi
 
 log "[6/8] Function URL create/get"
-if ! aws lambda get-function-url-config --function-name "$LAMBDA_NAME" >/dev/null 2>&1; then
-  aws lambda create-function-url-config --function-name "$LAMBDA_NAME" --auth-type NONE >/dev/null
+if ! aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+  aws lambda create-function-url-config --function-name "$LAMBDA_NAME" --region "$AWS_REGION" --auth-type NONE >/dev/null
 fi
 
 aws lambda update-function-url-config \
   --function-name "$LAMBDA_NAME" \
+  --region "$AWS_REGION" \
   --auth-type NONE \
-  --cors "{\"AllowOrigins\":[\"${CORS_ALLOW_ORIGIN}\"],\"AllowMethods\":[\"POST\"],\"AllowHeaders\":[\"Content-Type\",\"Authorization\"],\"ExposeHeaders\":[\"Content-Type\"],\"MaxAge\":600}" >/dev/null
+  --cors "{\"AllowOrigins\":[\"${CORS_ALLOW_ORIGIN}\"],\"AllowMethods\":[\"GET\",\"POST\"],\"AllowHeaders\":[\"Content-Type\",\"Authorization\"],\"ExposeHeaders\":[\"Content-Type\"],\"MaxAge\":600}" >/dev/null
 
 aws lambda add-permission \
   --function-name "$LAMBDA_NAME" \
+  --region "$AWS_REGION" \
   --statement-id FunctionURLAllowPublicAccess \
   --action lambda:InvokeFunctionUrl \
   --principal "*" \
@@ -336,12 +341,13 @@ aws lambda add-permission \
 
 aws lambda add-permission \
   --function-name "$LAMBDA_NAME" \
+  --region "$AWS_REGION" \
   --statement-id UrlPolicyInvokeFunctionPublic \
   --action lambda:InvokeFunction \
   --principal "*" \
   --invoked-via-function-url >/dev/null 2>&1 || true
 
-FUNCTION_URL="$(aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --query FunctionUrl --output text)"
+FUNCTION_URL="$(aws lambda get-function-url-config --function-name "$LAMBDA_NAME" --region "$AWS_REGION" --query FunctionUrl --output text)"
 
 log "[7/8] S3 bucket CORS apply"
 put_bucket_cors_or_fail "$POLLY_S3_BUCKET"
